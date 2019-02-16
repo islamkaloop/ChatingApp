@@ -1,0 +1,10 @@
+import java.net.Socket;
+import java.util.ArrayList;
+
+public class serverMember {
+	ArrayList<Object> member;
+	public serverMember(String name , Socket sock){
+		this.name=name;
+		this.sock=sock;
+	}
+}
