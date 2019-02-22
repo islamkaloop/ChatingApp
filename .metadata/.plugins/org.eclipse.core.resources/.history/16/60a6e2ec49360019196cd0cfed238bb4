@@ -1,0 +1,155 @@
+package M2;
+import java.io.*;
+import java.net.*;
+import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import javax.management.modelmbean.RequiredModelMBean;
+
+public class Server 
+{
+	static ArrayList<String> members = new ArrayList<>();
+	static ArrayList<Socket> sockets = new ArrayList<>();
+	public static void main(String[] args) throws IOException 
+	{
+		System.out.println("The server is running.");
+        ExecutorService pool = Executors.newFixedThreadPool(20);
+        try (ServerSocket listener = new ServerSocket(2019))
+        {
+            while (true) 
+            {
+            	Socket socket = listener.accept();
+            	if(joinResponse(socket)) {
+                    pool.execute(new serverThreads(socket));
+            	}
+            	else {
+                    PrintWriter outToClient = new PrintWriter(socket.getOutputStream(), true);
+	                outToClient.println("Name used");
+            	}
+            }
+        }
+	}
+	
+	private static boolean joinResponse (Socket socket) throws IOException {
+		BufferedReader inFromClient = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        PrintWriter outToClient = new PrintWriter(socket.getOutputStream(), true);
+    	String id = inFromClient.readLine();
+    	if(members.contains(id)) {
+    		outToClient.println("false");
+    		return false;
+    	}
+    	else {
+    		outToClient.println("true");
+    		sockets.add(socket);
+    		members.add(id);
+    		return true;
+    	}
+	}
+	
+	public static void memeberListResponse(Socket socket) throws IOException {
+		String s="#\n";
+        PrintWriter outToClient = new PrintWriter(socket.getOutputStream(), true);
+        for(int i=0;i<members.size();i++) {
+        	s+=members.get(i)+",";
+        }
+        outToClient.println(s);
+	}
+	
+	private static boolean Route(String Message,String Destination) throws IOException {
+		Socket sock =sockets.get(members.indexOf(Destination));
+		System.out.println(sock);
+		BufferedReader inFromClient = new BufferedReader(new InputStreamReader(sock.getInputStream()));
+		PrintWriter outToClient = new PrintWriter(sock.getOutputStream(), true);
+		outToClient.println(Message);
+		String s =inFromClient.readLine();
+		if(s.equals("true")){
+			return true;
+		}else{
+			return false;
+		}
+	}
+	
+	private static class serverThreads implements Runnable 
+	{
+        private Socket socket;
+        
+
+        public serverThreads(Socket socket) 
+        {
+            this.socket = socket;
+            System.out.println("New client connected at " + socket);
+        }
+
+        public void run() 
+        {
+            try 
+            {
+                BufferedReader inFromClient = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                PrintWriter outToClient = new PrintWriter(socket.getOutputStream(), true);
+            	while(true) 
+            	{
+	                String sentence = inFromClient.readLine();
+	                System.out.println(sentence);
+	                if(sentence.equals("true")|sentence.equals("false")){}
+	                else if (sentence.equals("#")) 
+	                {
+	                	memeberListResponse(this.socket);
+	    			}
+	                else if (sentence.equals("*")) 
+	                {
+	                	outToClient.println("*");
+	                	members.remove(sockets.indexOf(socket));
+	                	sockets.remove(socket);
+	                	this.socket.close();
+	                	break;
+	    			}
+	                else {
+	                	String source =sentence;
+	                	String destination =inFromClient.readLine();
+	                	String message=inFromClient.readLine();
+	                	if(checkToConnect(source,destination)){
+	                		outToClient.println("true");
+	                		while(true){
+	                			message=inFromClient.readLine();
+	                			System.out.println(message);
+	                			if(message.equals("leave")){
+	                				break;
+	                			}else{
+	                				Route(message,destination);
+	                			}
+	                		}
+	                	}else{
+	                		outToClient.println("false");
+	                	}
+	                	
+	                }
+            	}
+            } 
+            catch (Exception e) 
+            {
+                System.out.println("Error handling client "+e.getMessage());
+            } 
+            finally
+            {
+                try 
+                { 
+                	socket.close(); 
+                } 
+                catch (IOException e) {
+                	
+                }
+                System.out.println("Connection with client closed");
+            }
+        }
+
+		private boolean checkToConnect(String source, String destination) throws IOException {
+			if(members.contains(destination)){
+				boolean s=Route("$\n"+source, destination);
+				System.out.println(s);
+				return s;
+			}
+			return false;
+		}
+    }
+}

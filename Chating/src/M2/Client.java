@@ -1,146 +1,189 @@
 package M2;
 import java.io.BufferedReader;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class Client {
+	
+	static Socket clientSocket;
+	static DataInputStream inFromServer;
+	static DataOutputStream outToServer;
 
-	public static void main(String[] args) throws IOException, InterruptedException {
-		try (Socket socket = new Socket("j6578", 9898)) 
-        {
+	public static void main(String[] args) throws IOException 
+	{
 		BufferedReader inFromUser=new BufferedReader(new InputStreamReader(System.in));
         System.out.println("Enter your name to be identified with");
         String id=inFromUser.readLine();
-        if(join(id,socket)) {
-        	BufferedReader inFromServer = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        	PrintWriter outToServer = new PrintWriter(socket.getOutputStream(), true);
-        	System.out.println("If you want to get the memeber list type getMemberList."+'\n'
-        			+"If you want to connect to a specific user type his name \n"
-        			+ "If you want to quit type quit");
-        	ExecutorService pool = Executors.newFixedThreadPool(2);
-        	pool.execute(new serverinhandling(socket,id));
-        	while(true){
-        		String s1 ;
-        		String s;
-        		 s=inFromUser.readLine();
-	        	if(s.equals("getMemberList")) {
-	        		System.out.println("----------------------");
-	        		System.out.println("Online Users :");
-	        		getMemberList(socket);
-	         		System.out.println("----------------------");
-	        	}
-	        	else if(s.equals("quit")){
-	        		quit(socket);
-	        		socket.close();
-	        		break;
-	        	}
-	        	else {
-	        		String destination=s;
-	        		if(chat(id,destination,"",socket)){
-	        			chating(socket,id,destination);
-	        		}else{
-	        			System.out.println(destination+" is not exist in inernet now, try others");
-	        		}
-	        	}
+        join(id);
+        if(clientSocket!=null) 
+        {
+        	System.out.println("If you want to get the memeber list type getMemberList."+'\n'+"Send MSG Format is: Name MSG");
+        	ExecutorService pool = Executors.newFixedThreadPool(20);
+        	pool.execute(new liveMsgRead(inFromServer));
+        	while(true)
+        	{
+        		String message = inFromUser.readLine();
+        		if (message.toLowerCase().equals("bye") || message.toLowerCase().equals("quit") || message.toLowerCase().equals("exit")) 
+        		{
+                	quit();
+        			break;
+    			}
+        		else if(message.equals("getMemberList"))
+            	{
+            		getMemberList();
+            	}
+            	else
+            	{
+            		ArrayList<String> list= new ArrayList<>(Arrays.asList(message.split(" ")));
+            		if(list.size()>1) 
+            		{
+            			String x[]=new String[2];
+            			x=message.split(" ", 2);
+                		String destination=x[0];
+                		chat(clientSocket,destination,2,x[1]);
+            		}
+            		else
+            		{
+            			System.out.println("Incorrect Message Format");
+            		}
+            	}
         	}
-        }
-        else {
-        	System.out.println("Name is used");
-        }
+        	pool.shutdown();
         }
     }
-	private static void chating(Socket socket, String id, String destination) throws UnknownHostException, IOException {
-		BufferedReader inFromUser=new BufferedReader(new InputStreamReader(System.in));
-		System.out.println("you are connect to "+destination+" \n if you want to leave write leave");
-		while(true) {
-			System.out.println("Enter your Message:");
-			if(inFromUser.readLine().equals("leave")){
-				chat(id, destination, "leave",socket);
-				break;
-			}
-			chat(id,destination,inFromUser.readLine(),socket);
-			String inMessage=inFromUser.readLine();
-			System.out.println(destination +" : "+inMessage );
-		}
-	}
-	public static boolean join(String name, Socket socket) throws IOException {
-    		BufferedReader inFromServer = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            PrintWriter outToServer = new PrintWriter(socket.getOutputStream(), true);
-	        outToServer.println(name);
-            if(inFromServer.readLine().equals("true")) {
-                System.out.println("I am connected at " + socket +" with unique name "+name);
-                return true;
-            }
-            else {
-            	return false;
-            }
-	}
-	public static void getMemberList(Socket socket) throws UnknownHostException, IOException{
-			BufferedReader inFromServer = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-	        PrintWriter outToServer = new PrintWriter(socket.getOutputStream(), true);
-            outToServer.println("#");
-            String s=inFromServer.readLine();
-            String[] s1 =s.split(",");
-            for(int i=0;i<s1.length;i++)
-            System.out.println(s1[i]);
-	}
-	public static void quit(Socket socket) throws UnknownHostException, IOException {
-	        PrintWriter outToServer = new PrintWriter(socket.getOutputStream(), true);
-            outToServer.println("*");
-            System.out.println("bye");
-	}
-	public static boolean chat (String Source, String Destination, String Message, Socket socket) throws UnknownHostException, IOException {
-	        PrintWriter outToServer = new PrintWriter(socket.getOutputStream(), true);
-    		BufferedReader inFromServer = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-    		outToServer.println(Source+'\n'+Destination+'\n'+Message);
-            if(inFromServer.readLine().equals("true")){
-            	return true;
-            }
-            else{
-            	return false; 
-            }
-	}
-	private static class serverinhandling implements Runnable 
+	public static class liveMsgRead implements Runnable
 	{
-        private Socket socket;
-        private String id;
-        
-
-        public serverinhandling(Socket socket, String id) 
-        {
-            this.socket = socket;
-            this.id = id;
-        }
-
-        public void run() 
-        {
-			try {
-				BufferedReader inFromServer = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-	        	PrintWriter outToServer = new PrintWriter(socket.getOutputStream(), true);
-	        	BufferedReader inFromUser=new BufferedReader(new InputStreamReader(System.in));
-	        	String s1 = inFromServer.readLine();
-	        	if(s1.endsWith("*")){
-					System.out.println(s1+" want to connect with you if you want to connect write yes:");
-		        	String s=inFromUser.readLine();
-		        	if(s.equals("yes")){
-		        		outToServer.println("true");
-		        		chating(socket,id,s1);
-		        	}else{
-		        		outToServer.println("false");
-		        	}
-	        	}
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
+		private DataInputStream inFromServer;
+		public liveMsgRead (DataInputStream inFromServer) {
+			this.inFromServer=inFromServer;
+		}
+		@Override
+		public void run() {
+			try
+			{
+				while(true)
+				{
+					String msg = inFromServer.readUTF();
+					char c = msg.charAt(0);
+					if(c=='*') 
+					{
+						System.out.println(msg.substring(1));
+					}
+					else if(c=='#') 
+					{
+						inFromServer.close();
+				        outToServer.close();
+				        clientSocket.close();
+						break;
+					}
+					else if(msg.equals("true")) 
+					{
+						System.out.println("Message sent Successfully");
+					}
+					else if(msg.equals("false"))
+					{
+						System.out.println("Entered username is not online or incorrect or it is yourself");
+					}
+					else
+					{
+						System.out.println(msg);
+					}
+				}
+			}
+			catch(Exception e) {
 				e.printStackTrace();
 			}
-        	
+		}
+		
+	}
+	public static void join(String name) throws IOException 
+	{
+		Socket socket = new Socket("J6578", 9898);
+		inFromServer = new DataInputStream(socket.getInputStream());
+		outToServer = new DataOutputStream(socket.getOutputStream());
+		outToServer.writeUTF(name);
+		if(inFromServer.readUTF().equals("true"))
+        {
+            System.out.println("I am connected at " + socket +" with unique name "+name);
+    		clientSocket=socket;
         }
-        
+        else 
+        {
+        	System.out.println("Name is already used");
+        	socket.close();
+        	clientSocket=null;
+        	inFromServer.close();
+        	inFromServer=null;
+        	outToServer.close();
+        	outToServer=null;
+        }
+	}
+	public static void getMemberList() throws UnknownHostException, IOException
+	{
+		System.out.println("Online Users");
+		outToServer.writeUTF("getMemberList");
+		outToServer.flush();
+	}
+	public static void quit() throws UnknownHostException, IOException 
+	{
+		outToServer.writeUTF("quit");
+        System.out.println("bye");
+	}
+	public static void chat (Socket Source, String Destination, int TTL, String Message) throws UnknownHostException, IOException 
+	{
+		outToServer.writeUTF(Destination+" "+Message);
+		outToServer.flush();
+		/*for(int i=0;i<999999999;i++)
+		{
+			if(inFromServerFlag != null)
+			{
+				if(inFromServerFlag.equals("false"))
+				{
+					inFromServerFlag=null;
+					return false;
+				}
+				else
+				{
+					inFromServerFlag=null;
+					return true;
+				}
+			}
+		}
+		
+		System.out.println("out");
+		inFromServerFlag=null;
+		return false;
+		*/
+		/*boolean flag = false;
+		while(inFromServerFlag==null)
+		{
+			if(inFromServerFlag!=null)
+			{
+				if(inFromServerFlag.equals("false"))
+				{
+					inFromServerFlag=null;
+					flag=false;
+				}
+				else
+				{
+					inFromServerFlag=null;
+					flag=true;
+				}
+			}
+		}
+		inFromServerFlag=null;
+		if(flag)
+			return true;
+		else
+			return false;
+		*/
 	}
 }

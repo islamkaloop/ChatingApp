@@ -1,0 +1,193 @@
+package M2;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.Socket;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import javax.sql.PooledConnection;
+
+public class Client {
+
+	static boolean finished=false;
+	static String infromserver="";
+	static String infromuser="^";
+	static int controller=0;
+	static Socket socket=null;
+	static BufferedReader inFromUser=new BufferedReader(new InputStreamReader(System.in));
+	static BufferedReader inFromServer = null;
+	static PrintWriter outToServer =null;
+	static boolean session=false;
+	static String dest="";
+	public static void main(String[] args) throws IOException, InterruptedException {
+		socket = new Socket("j6578", 2019);
+		inFromServer = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+    	outToServer = new PrintWriter(socket.getOutputStream(), true);
+        System.out.println("Enter your name to be identified with");
+        String id=inFromUser.readLine();
+        if(join(id)) {
+        	System.out.println("If you want to get the memeber list type getMemberList."+'\n'
+        			+"If you want to connect to a specific user type his name \n"
+        			+ "If you want to quit type quit");
+        	serverinhandling servhandl =new serverinhandling(id);
+        	Thread thread =new Thread(servhandl,"sr1");
+        	thread.start();
+        	while(true){
+        			infromuser=inFromUser.readLine();
+        		if(infromuser.equals("yes")|infromuser.equals("no")){
+        			
+        		}
+        		else if(infromuser.equals("getMemberList")) {
+	        		System.out.println("----------------------");
+	        		System.out.println("Online Users :");
+	        		getMemberList();
+	         		System.out.println("----------------------");
+	        	}
+	        	else if(infromuser.equals("quit")){
+	        		quit();
+	        		thread.stop();
+	        		socket.close();
+	        		break;
+	        	}
+	        	else {
+	        		String destination=infromuser;
+	        		if(chat(id,destination,"")){
+	        			session=true;
+	        			dest=destination;
+	        			chating(id,destination);
+	        		}else{
+	        			System.out.println(destination+" is not exist in inernet now, try others "
+	        					+ "or he does not want to talk with you");
+	        		}
+	        	}
+        	}
+        }
+        else {
+        	System.out.println("Name is used");
+        }
+    }
+	private static void chating(String id, String destination) throws UnknownHostException, IOException {
+		System.out.println("-----------------------");
+		System.out.println("you are connect to "+destination+" \n"
+				+ "if you want to leave write leave");
+		System.out.println("-----------------------");
+		controller=1;
+		String mess="";
+		while(true) {
+			if(session){
+				System.out.print("Enter your Message: ");
+				mess=inFromUser.readLine();
+				if(mess.equals("leave")){
+					chat(id, destination, "leave");
+					break;
+				}else
+				chat(id,destination,mess);
+			}else
+				System.out.println(destination+ " leave chat");
+		}
+	}
+	public static boolean join(String name) throws IOException {
+	        outToServer.println(name);
+            if(inFromServer.readLine().equals("true")) {
+                System.out.println("I am connected at " + socket +" with unique name "+name);
+                return true;
+            }
+            else {
+            	return false;
+            }
+	}
+	public static void getMemberList() throws UnknownHostException, IOException{
+			controller=1;
+			finished=true;
+            outToServer.println("#");
+            while(finished){System.out.print("");}
+            String[] s =infromserver.split(",");
+            for(int i=0;i<s.length;i++)System.out.println(s[i]);
+            controller=0;
+	}
+	public static void quit() throws UnknownHostException, IOException {
+            outToServer.println("*");   
+            System.out.println("bye");
+	}
+	public static boolean chat (String Source, String Destination, String Message) throws UnknownHostException, IOException {
+			System.out.println("chat");
+			controller=1;
+			finished=true;
+			if(session){
+				outToServer.println(Message);
+			}else{
+				outToServer.println(Source+'\n'+Destination+'\n'+Message);
+			}
+			while(finished){System.out.print("");}
+    		if(infromserver.equals("true")){
+            	return true;
+            }
+            else{
+            	return false; 
+            }
+	}
+	private static class serverinhandling implements Runnable 
+	{
+        private String id;
+        
+
+        public serverinhandling(String id) 
+        {
+            this.id = id;
+        }
+
+        public void run() 
+        {
+			try {
+				while(true){
+	        	String s1 = inFromServer.readLine();
+	        	if(session){
+	        		System.out.println();
+	        		System.out.println(dest+" : "+s1);
+	        		System.out.print("Enter your Message: ");
+	        		outToServer.println("true");
+	        	}
+	        	else{
+	        	if(s1.equals("*")){
+	        		break;
+	        	}
+	        	if(controller==0){
+	        		if(s1.equals("$")){
+	        			s1=inFromServer.readLine();
+	        			String s=infromuser;
+						System.out.print(s1+" want to connect with you if you want to connect write yes:");
+						while(s.equals(infromuser)){System.out.print("");}
+			        	if(infromuser.equals("yes")){
+			        		outToServer.println("true");
+			        		outToServer.println("true");
+			        		session=true;
+			        		dest=s1;
+			        		chating(id,s1);
+			        	}else{
+			        		outToServer.println("false");
+			        		outToServer.println("false");
+			        	}
+		        	}
+	        	}   	
+				else{
+					if(s1.equals("#")){
+						s1=inFromServer.readLine();
+					}
+					infromserver=s1;	 
+				}
+	        	finished=false;
+				}
+				}
+			
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+        }
+        
+	}
+}

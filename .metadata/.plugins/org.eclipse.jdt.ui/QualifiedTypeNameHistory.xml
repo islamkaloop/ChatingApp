@@ -6,4 +6,6 @@
 <fullyQualifiedTypeName name="javax.management.modelmbean.RequiredModelMBean"/>
 <fullyQualifiedTypeName name="java.lang.String"/>
 <fullyQualifiedTypeName name="M2.Client.serverinhandling"/>
+<fullyQualifiedTypeName name="javax.sql.PooledConnection"/>
+<fullyQualifiedTypeName name="java.lang.Thread"/>
 </qualifiedTypeNameHistroy>

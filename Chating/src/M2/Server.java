@@ -5,130 +5,179 @@ import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import javax.management.modelmbean.RequiredModelMBean;
-
-public class Server 
+public class Server
 {
 	static ArrayList<String> members = new ArrayList<>();
-	static ArrayList<Socket> sockets = new ArrayList<>();
+	static ArrayList<Socket> membersSocket = new ArrayList<>();
+	static String clientName;
+	static Socket clientSocket;
+	static DataInputStream inFromClient;
+    static DataOutputStream outToClient;
+	static ArrayList<DataInputStream> inFromClientList = new ArrayList<>();
+	static ArrayList<DataOutputStream> outToClientList =  new ArrayList<>();
+	
 	public static void main(String[] args) throws IOException 
 	{
-		System.out.println("The server is running.");
+		System.out.println("Server A is running.");
         ExecutorService pool = Executors.newFixedThreadPool(20);
+        int clientNumber = 0;
         try (ServerSocket listener = new ServerSocket(9898))
         {
             while (true) 
             {
-            	Socket socket = listener.accept();
-            	if(joinResponse(socket)) {
-                    pool.execute(new serverThreads(socket));
-            	}
-            	else {
-                    PrintWriter outToClient = new PrintWriter(socket.getOutputStream(), true);
-	                outToClient.println("Name used");
+            	clientSocket = listener.accept();
+            	if(joinResponse()) 
+            	{
+                    pool.execute(new Thread(clientSocket, clientNumber++,clientName,inFromClient,outToClient));
             	}
             }
         }
 	}
 	
-	private static boolean joinResponse (Socket socket) throws IOException {
-		BufferedReader inFromClient = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        PrintWriter outToClient = new PrintWriter(socket.getOutputStream(), true);
-    	String id = inFromClient.readLine();
-    	if(members.contains(id)) {
-    		outToClient.println("false");
+	private static boolean joinResponse () throws IOException 
+	{
+		inFromClient = new DataInputStream(clientSocket.getInputStream());
+		outToClient = new DataOutputStream(clientSocket.getOutputStream());
+		String id = inFromClient.readUTF();
+    	clientName=id;
+    	if(members.contains(id)) 
+    	{
+    		outToClient.writeUTF("false");
+    		outToClient.flush();
+    		clientSocket.close();
+    		inFromClient.close();
+    		outToClient.close();
+    		clientName=null;
+    		clientSocket=null;
+    		inFromClient=null;
+    		outToClient=null;
     		return false;
     	}
-    	else {
-    		outToClient.println("true");
-    		sockets.add(socket);
+    	else 
+    	{
     		members.add(id);
+    		membersSocket.add(clientSocket);
+    		inFromClientList.add(inFromClient);
+    		outToClientList.add(outToClient);
+    		outToClient.writeUTF("true");
+    		outToClient.flush();
     		return true;
     	}
 	}
 	
-	public static void memeberListResponse(Socket socket) throws IOException {
-		String s="";
-        PrintWriter outToClient = new PrintWriter(socket.getOutputStream(), true);
-        for(int i=0;i<members.size();i++) {
-        	s+=members.get(i)+",";
-        }
-        outToClient.println(s);
-	}
-	
-	private static boolean Route(String Message,String Destination) throws IOException {
-		Socket sock =sockets.get(members.indexOf(Destination));
-		BufferedReader inFromClient = new BufferedReader(new InputStreamReader(sock.getInputStream()));
-		PrintWriter outToClient = new PrintWriter(sock.getOutputStream(), true);
-		outToClient.println(Message);
-		if(inFromClient.readLine().equals("true")){
-			return true;
-		}else{
-			return false;
-		}
-	}
-	
-	private static class serverThreads implements Runnable 
+	private static class Thread implements Runnable 
 	{
         private Socket socket;
         private int clientNumber;
-        
+        private String clientName;
+        private DataInputStream inFromClient;
+        private DataOutputStream outToClient;
 
-        public serverThreads(Socket socket) 
+        public Thread(Socket socket, int clientNumber, String clientName, DataInputStream inFromClient, DataOutputStream outToClient) 
         {
             this.socket = socket;
+            this.clientNumber = clientNumber;
+            this.clientName=clientName;
+            this.inFromClient=inFromClient;
+            this.outToClient=outToClient;
             System.out.println("New client #" + clientNumber + " connected at " + socket);
         }
+        
+        public void memberListResponse() throws IOException {
+    		String s="";
+            for(int i=0;i<members.size();i++) {
+            	s+=members.get(i)+"\n";
+            }
+            outToClient.writeUTF(s);
+            outToClient.flush();
+    	}
 
         public void run() 
         {
             try 
             {
-                BufferedReader inFromClient = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                PrintWriter outToClient = new PrintWriter(socket.getOutputStream(), true);
             	while(true) 
             	{
-	                String sentence = inFromClient.readLine();
-	                if (sentence.equals("#")) 
+        			String sentence = inFromClient.readUTF();
+	                if(sentence !=null)
 	                {
-	                	memeberListResponse(this.socket);
-	    			}
-	                else if (sentence.equals("*")) 
-	                {
-	                	members.remove(sockets.indexOf(socket));
-	                	sockets.remove(socket);
-	                	this.socket.close();
-	                	break;
-	    			}
-	                else {
-	                	String source =sentence;
-	                	String destination =inFromClient.readLine();
-	                	String message=inFromClient.readLine();
-	                	if(checkToConnect(source,destination)){
-	                		outToClient.println("true");
-	                		while(true){
-	                			message=inFromClient.readLine();
-	                			if(message.equals("leave")){
-	                				break;
-	                			}else{
-	                				Route(message,destination);
-	                			}
-	                		}
-	                	}else{
-	                		outToClient.println("false");
-	                	}
-	                	
+	                	if (sentence.equals("quit")) 
+		                {
+		                	break;
+		    			}
+		                else if(sentence.equals("getMemberList")) 
+		                {
+		                	memberListResponse();
+		                }
+		                else
+		                {
+		                	String x[]=new String[2];
+		            		x=sentence.split(" ", 2);
+		            		boolean founded=false;
+		            		if(x[0].equals(clientName))
+		            		{
+		            			outToClient.writeUTF("false");
+		            			outToClient.flush();
+		            			continue;
+		            		}
+	            			for(int i=0;i<members.size();i++) 
+		                	{
+		                		if(members.get(i).equals(x[0])) 
+		                		{
+		                			founded=true;
+		                			break;
+		                		}
+		                	}
+	            			if(!founded) 
+	            			{
+	            				outToClient.writeUTF("false");
+	            				outToClient.flush();
+	            			}
+	            			else 
+	            			{
+	            				DataOutputStream destination = null;
+		            			for(int i=0;i<members.size();i++) 
+			                	{
+			                		if(members.get(i).equals(x[0])) 
+			                		{
+			                			destination=outToClientList.get(i);
+			                			break;
+			                		}
+			                	}
+		            			destination.writeUTF("*From "+clientName+" to You: "+x[1]);
+		                        destination.flush();
+		                        outToClient.writeUTF("true");
+		                        outToClient.flush();
+	            			}
+		                }
 	                }
-            	}
+        		}
             } 
             catch (Exception e) 
             {
-                System.out.println("Error handling client #" + clientNumber +"   "+e.getMessage());
+            	System.out.println(e.getMessage());
+            	e.printStackTrace();
+                System.out.println("Error handling client #" + clientNumber);
             } 
             finally
             {
                 try 
-                { 
+                {
+                	for(int i=0;i<members.size();i++) 
+                	{
+                		if(members.get(i).equals(clientName)) 
+                		{
+                			outToClient.writeUTF("#");
+                			outToClient.flush();
+                        	members.remove(i);
+                        	membersSocket.remove(i);
+                        	outToClientList.remove(i);
+                        	inFromClientList.remove(i);
+                        	inFromClient.close();
+                        	outToClient.close();
+                			break;
+                		}
+                	}
                 	socket.close(); 
                 } 
                 catch (IOException e) {
@@ -137,10 +186,5 @@ public class Server
                 System.out.println("Connection with client # " + clientNumber + " closed");
             }
         }
-
-		private boolean checkToConnect(String source, String destination) throws IOException {
-			members.contains(destination);
-			return Route(source+"*", destination);
-		}
     }
 }

@@ -1,0 +1,226 @@
+package M3;
+import java.io.*;
+import java.net.*;
+import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class ServerA
+{
+	static ArrayList<String> members = new ArrayList<>();
+	static ArrayList<Socket> membersSocket = new ArrayList<>();
+	static String clientName;
+	static Socket clientSocket;
+	static DataInputStream inFromClient;
+    static DataOutputStream outToClient;
+	static ArrayList<DataInputStream> inFromClientList = new ArrayList<>();
+	static ArrayList<DataOutputStream> outToClientList =  new ArrayList<>();
+	
+	public static void main(String[] args) throws IOException 
+	{
+		System.out.println("Server A is running.");
+        ExecutorService pool = Executors.newFixedThreadPool(20);
+        int clientNumber = 0;
+        try (ServerSocket listener = new ServerSocket(2018))
+        {
+            while (true) 
+            {
+            	clientSocket = listener.accept();
+            	if(joinResponse()) 
+            	{
+                    pool.execute(new Thread(clientSocket, clientNumber++,clientName,inFromClient,outToClient));
+            	}
+            }
+        }
+	}
+	
+	private static boolean joinResponse () throws IOException 
+	{
+		inFromClient = new DataInputStream(clientSocket.getInputStream());
+		outToClient = new DataOutputStream(clientSocket.getOutputStream());
+		String id = inFromClient.readUTF();
+		System.out.println(id);
+		if(id.equals("server#")){
+			System.out.println(2);
+			String s="";
+	          for(int i=0;i<members.size();i++) {
+	          	s+=members.get(i)+"\n";
+	          }
+	        outToClient.writeUTF(s);
+	        outToClient.flush();
+			outToClient.writeUTF("false");
+    		outToClient.flush();
+    		clientSocket.close();
+    		inFromClient.close();
+    		outToClient.close();
+    		clientName=null;
+    		clientSocket=null;
+    		inFromClient=null;
+    		outToClient=null;
+    		return false;
+		}
+    	clientName=id;
+    	if(members.contains(id)) 
+    	{
+    		outToClient.writeUTF("false");
+    		outToClient.flush();
+    		clientSocket.close();
+    		inFromClient.close();
+    		outToClient.close();
+    		clientName=null;
+    		clientSocket=null;
+    		inFromClient=null;
+    		outToClient=null;
+    		return false;
+    	}
+    	else 
+    	{
+    		members.add(id);
+    		membersSocket.add(clientSocket);
+    		inFromClientList.add(inFromClient);
+    		outToClientList.add(outToClient);
+    		outToClient.writeUTF("true");
+    		outToClient.flush();
+    		return true;
+    	}
+	}
+	
+	public static String getMembersfromotherserver() throws IOException{
+		System.out.println(1);
+		Socket sock =new Socket("j6578", 2019);
+		DataInputStream inFromClient = new DataInputStream(sock.getInputStream());
+		DataOutputStream outToClient = new DataOutputStream(sock.getOutputStream());
+		outToClient.writeUTF("server#");
+		outToClient.flush();
+		String s = inFromClient.readUTF();
+		System.out.println(s);
+		outToClient.close();
+		inFromClient.close();
+		sock.close();
+		return s;
+	}
+	
+	private static class Thread implements Runnable 
+	{
+        private Socket socket;
+        private int clientNumber;
+        private String clientName;
+        private DataInputStream inFromClient;
+        private DataOutputStream outToClient;
+
+        public Thread(Socket socket, int clientNumber, String clientName, DataInputStream inFromClient, DataOutputStream outToClient) 
+        {
+            this.socket = socket;
+            this.clientNumber = clientNumber;
+            this.clientName=clientName;
+            this.inFromClient=inFromClient;
+            this.outToClient=outToClient;
+            System.out.println("New client #" + clientNumber + " connected at " + socket);
+        }
+        
+        public void memberListResponse() throws IOException {
+    		String s="";
+            for(int i=0;i<members.size();i++) {
+            	s+=members.get(i)+"\n";
+            }
+            s+=getMembersfromotherserver();
+            outToClient.writeUTF(s);
+            outToClient.flush();
+    	}
+
+        public void run() 
+        {
+            try 
+            {
+            	while(true) 
+            	{
+        			String sentence = inFromClient.readUTF();
+	                if(sentence !=null)
+	                {
+	                	if (sentence.equals("quit")) 
+		                {
+		                	break;
+		    			}
+		                else if(sentence.equals("getMemberList")) 
+		                {
+		                	memberListResponse();
+		                }
+		                else
+		                {
+		                	String x[]=new String[2];
+		            		x=sentence.split(" ", 2);
+		            		boolean founded=false;
+		            		if(x[0].equals(clientName))
+		            		{
+		            			outToClient.writeUTF("false");
+		            			outToClient.flush();
+		            			continue;
+		            		}
+	            			for(int i=0;i<members.size();i++) 
+		                	{
+		                		if(members.get(i).equals(x[0])) 
+		                		{
+		                			founded=true;
+		                			break;
+		                		}
+		                	}
+	            			if(!founded) 
+	            			{
+	            				outToClient.writeUTF("false");
+	            				outToClient.flush();
+	            			}
+	            			else 
+	            			{
+	            				DataOutputStream destination = null;
+		            			for(int i=0;i<members.size();i++) 
+			                	{
+			                		if(members.get(i).equals(x[0])) 
+			                		{
+			                			destination=outToClientList.get(i);
+			                			break;
+			                		}
+			                	}
+		            			destination.writeUTF("*From "+clientName+" to You: "+x[1]);
+		                        destination.flush();
+		                        outToClient.writeUTF("true");
+		                        outToClient.flush();
+	            			}
+		                }
+	                }
+        		}
+            } 
+            catch (Exception e) 
+            {
+            	System.out.println(e.getMessage());
+            	e.printStackTrace();
+                System.out.println("Error handling client #" + clientNumber);
+            } 
+            finally
+            {
+                try 
+                {
+                	for(int i=0;i<members.size();i++) 
+                	{
+                		if(members.get(i).equals(clientName)) 
+                		{
+                			outToClient.writeUTF("#");
+                			outToClient.flush();
+                        	members.remove(i);
+                        	membersSocket.remove(i);
+                        	outToClientList.remove(i);
+                        	inFromClientList.remove(i);
+                        	inFromClient.close();
+                        	outToClient.close();
+                			break;
+                		}
+                	}
+                	socket.close(); 
+                } 
+                catch (IOException e) {
+                	
+                }
+                System.out.println("Connection with client # " + clientNumber + " closed");
+            }
+        }
+    }
+}
